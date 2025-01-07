@@ -31,7 +31,7 @@ async def send_message(chat_id, text):
     await bot.send_message(chat_id=chat_id, text=text)
     await bot.session.close() 
 
-def main(page: Page):
+async def main(page: Page):
     page.vertical_alignment = MainAxisAlignment.CENTER
     page.window_width = 500
     page.window_height = 700
@@ -39,51 +39,68 @@ def main(page: Page):
 
     login_input = TextField(text_align=TextAlign.CENTER, label="Login")
     password_input = TextField(text_align=TextAlign.CENTER, label="Password", password=True)
-    gpt_input = TextField(text_align=TextAlign.CENTER, label='Введи свой вопрос')
-    gpt_text = ft.Text('Пока что тут нечего нет. Введи свой запрос и тут появится ответ')
     user_memory = {}
 
-    async def gpttt(text): # e заменен на text
-        try:
+
+
+
+    gpt_text = ft.Text(value="", expand=True)
+    gpt_input = ft.TextField(expand=True)
+
+    async def auth(e):
+        _login = login_input.value
+        _pass = password_input.value
+
+        user = check_user(_login, _pass)
+        if user:
+            page.clean()
+            next_content = ft.Container(              
+                ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Text("GPT Response:", weight=ft.FontWeight.BOLD),
+                                gpt_text,
+                            ],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        gpt_input,
+                        ft.ElevatedButton("Отправить", on_click=lambda e: send_msg(e)),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,
+                )
+            )
+
+            page.add(next_content)
             page.update()
-            if text: # Проверка на пустой текст
+        else:
+            page.add(ft.Text("Неверный логин или пароль", text_align=ft.TextAlign.CENTER))
+            page.update()
+
+
+    async def gpt(text):
+        try:
+            if text:
                 response = await client.chat.completions.create(
-                    model="gpt-4o-mini", 
-                    messages=[{"role": "user", 
-                               "content": str(text)}],
-                ) 
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": str(text)}],
+                )
                 return response.choices[0].message.content
             else:
                 return "Введите текст"
         except Exception as e:
             return f"Ошибка: {e}"
-        finally:
-            page.update()
 
-    async def auth(e):
-        _login = login_input.value
-        _pass = password_input.value
-    
-        user = check_user(_login, _pass)
-        if user:
-            page.clean()
-            # await send_message(user[0], 'Успешная авторизация!')
-            next_content = ft.Container(
-                ft.Row(
-                    [
-                        gpt_text,
-                        gpt_input,
-                        ft.ElevatedButton("Отправить", on_click= await gpttt(gpt_input.value)),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
-                padding=ft.padding.all(20),
-            )
-            page.add(next_content)
-            page.update()
 
-        else:
-            page.add(Text("Неверный логин или пароль", text_align=TextAlign.CENTER))
+    async def send_msg(e):
+        input_text = gpt_input.value
+        gpt_input.value = ""
+        response = await gpt(input_text)
+        gpt_text.value = response
+        page.update()
+
+
 
     def mode(e):
         if page.theme_mode == 'dark':
