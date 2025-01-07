@@ -43,16 +43,22 @@ def main(page: Page):
     gpt_text = ft.Text('Пока что тут нечего нет. Введи свой запрос и тут появится ответ')
     user_memory = {}
 
-    async def gpt(e):
-        # Функция для получения ответа от OpenAI
-            response = await client.chat.completions.create(
-                messages=[{"role": "user",
-                        "content": str(gpt_input)}],
-                model = "gpt-4o-mini"
-            )
-            print(gpt_input.value)
-            print(response.choices[0].message.content)
-            gpt_text.value = response.choices[0].message.content
+    async def gpttt(text): # e заменен на text
+        try:
+            page.update()
+            if text: # Проверка на пустой текст
+                response = await client.chat.completions.create(
+                    model="gpt-4o-mini", 
+                    messages=[{"role": "user", 
+                               "content": str(text)}],
+                ) 
+                return response.choices[0].message.content
+            else:
+                return "Введите текст"
+        except Exception as e:
+            return f"Ошибка: {e}"
+        finally:
+            page.update()
 
     async def auth(e):
         _login = login_input.value
@@ -61,14 +67,13 @@ def main(page: Page):
         user = check_user(_login, _pass)
         if user:
             page.clean()
-            gptt = await gpt(gpt_input.value)
             # await send_message(user[0], 'Успешная авторизация!')
             next_content = ft.Container(
                 ft.Row(
                     [
                         gpt_text,
                         gpt_input,
-                        ft.ElevatedButton("Отправить", on_click=gpt),
+                        ft.ElevatedButton("Отправить", on_click= await gpttt(gpt_input.value)),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                 ),
@@ -149,5 +154,5 @@ def init_db():
 
 if __name__ == '__main__':
     init_db()
-    ft.app(target=main) #, view=ft.AppView.WEB_BROWSER
+    ft.app(target=main, view=ft.AppView.WEB_BROWSER) #, view=ft.AppView.WEB_BROWSER
     
