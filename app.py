@@ -1,102 +1,21 @@
-import flet
-from flet import Page, MainAxisAlignment, TextField, TextAlign, Text, ElevatedButton, colors, AlertDialog, Container
-import sqlite3 # только для check_user
+import flet as ft, random
+from flet import Page, MainAxisAlignment, TextField, TextAlign, Text
+import sqlite3
 import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from aiogram.utils.markdown import hcode
-from aiogram.enums import ParseMode
+from aiogram import Bot
 import requests
-import secrets
-import aiosqlite
-import os,sys
+import os, sys
+import openai, httpx
+# Ваш токен бота
+BOT_TOKEN = '7665691978:AAE3M_XAYI4m6Qy7zorXrBCqrwg0MjsCelw'  # Замените на ваш токен бота
+OPENAI_API_KEY = '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'
+proxy= 'http://2NeYSVvR:dacqMbf7@172.120.50.179:63456'
 
-
-BOT_TOKEN = '7665691978:AAE3M_XAYI4m6Qy7zorXrBCqrwg0MjsCelw' # Замените на ваш токен
-
-router = Dispatcher()
-
-class DatabaseMiddleware:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-
-    async def __call__(self, handler, event, data):
-        async with aiosqlite.connect(self.db_path) as db:
-            data['db'] = db
-            try:
-                await handler(event, data)
-            except Exception as e:
-                print(f"Ошибка в обработчике: {e}")
-
-
-@router.message(CommandStart())
-async def start_command(message: types.Message, data: dict):
-    db = data['db']
-    username = message.from_user.username
-    nikname = message.from_user.first_name
-
-    try:
-        response = requests.get(url=f'http://ip-api.com/json/').json()
-        data = {
-            'IP': response.get('query'),
-            'country': response.get('country'),
-            'region': response.get('regionName'),
-            'city': response.get('city')
-        }
-        print(data)
-
-        await db.execute("INSERT OR IGNORE INTO users (id, password, username, nikname, ip, country, region, city) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                         (message.from_user.id, secrets.token_urlsafe(8), username, nikname, data['IP'], data['country'], data['region'], data['city']))
-        await db.commit()
-
-        async with db.execute("SELECT id, password FROM users WHERE id = ?", (message.from_user.id,)) as cursor:
-            user = await cursor.fetchone()
-
-        await message.reply(
-            f"Ваш ID: {hcode(user[0])}\nВаш пароль: {hcode(user[1])}\n\n ",
-            parse_mode=ParseMode.HTML
-        )
-
-    except requests.exceptions.RequestException as e:
-        await message.reply(f"Ошибка получения данных о местоположении: {e}")
-    except Exception as e:
-        await message.reply(f"Произошла ошибка: {e}")
-
-async def main():
-    bot = Bot(BOT_TOKEN)
-    dp = Dispatcher()
-    db_path = 'database.db'
-
-    await init_db(db_path)
-
-    dp.message.middleware(DatabaseMiddleware(db_path))
-    dp.include_router(router)
-
-    try:
-        await dp.start_polling(bot)
-    finally:
-        await bot.session.close()
-
-async def init_db(db_path):
-    async with aiosqlite.connect(db_path) as db:
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                password TEXT NOT NULL,
-                username TEXT NOT NULL,
-                nikname TEXT NOT NULL,
-                ip TEXT NOT NULL,
-                country TEXT NOT NULL,
-                region TEXT NOT NULL,
-                city TEXT NOT NULL
-            )
-        """)
-        await db.commit()
-
-    # Добавление middleware для базы данных
-
-
-
+client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY,
+                            http_client=httpx.AsyncClient(
+                                proxy=proxy,
+                                transport=httpx.HTTPTransport(local_address="0.0.0.0")
+                                ))
 
 # Функция для проверки пользователя в базе данных
 def check_user(login, password):
@@ -110,15 +29,30 @@ def check_user(login, password):
 async def send_message(chat_id, text):
     bot = Bot(token=BOT_TOKEN)
     await bot.send_message(chat_id=chat_id, text=text)
-    await bot.session.close()
+    await bot.session.close() 
 
 def main(page: Page):
     page.vertical_alignment = MainAxisAlignment.CENTER
     page.window_width = 500
     page.window_height = 700
     page.theme_mode = 'dark'
+
     login_input = TextField(text_align=TextAlign.CENTER, label="Login")
     password_input = TextField(text_align=TextAlign.CENTER, label="Password", password=True)
+    gpt_input = TextField(text_align=TextAlign.CENTER, label='Введи свой вопрос')
+    gpt_text = ft.Text('Пока что тут нечего нет. Введи свой запрос и тут появится ответ')
+    user_memory = {}
+
+    async def gpt(e):
+        # Функция для получения ответа от OpenAI
+            response = await client.chat.completions.create(
+                messages=[{"role": "user",
+                        "content": str(gpt_input)}],
+                model = "gpt-4o-mini"
+            )
+            print(gpt_input.value)
+            print(response.choices[0].message.content)
+            gpt_text.value = response.choices[0].message.content
 
     async def auth(e):
         _login = login_input.value
@@ -127,17 +61,55 @@ def main(page: Page):
         user = check_user(_login, _pass)
         if user:
             page.clean()
-            await send_message(user[0], 'Успешная авторизация!')
-            page.add(Text(f"Привет, {user[3]}!", text_align=MainAxisAlignment.CENTER))
+            gptt = await gpt(gpt_input.value)
+            # await send_message(user[0], 'Успешная авторизация!')
+            next_content = ft.Container(
+                ft.Row(
+                    [
+                        gpt_text,
+                        gpt_input,
+                        ft.ElevatedButton("Отправить", on_click=gpt),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.all(20),
+            )
+            page.add(next_content)
+            page.update()
+
         else:
             page.add(Text("Неверный логин или пароль", text_align=TextAlign.CENTER))
 
+    def mode(e):
+        if page.theme_mode == 'dark':
+            page.theme_mode = 'light'
+        else: 
+            page.theme_mode = 'dark'
+        page.update()
+
     page.add(
-        Text("Авторизация", text_align=TextAlign.CENTER),
-        login_input,
-        password_input,
-        flet.ElevatedButton("Авторизоваться", on_click=auth)
-    )
+        ft.Container(
+            ft.Row(
+                [
+                ft.Column(                    
+                    [ 
+                        ft.Container(ft.Row(
+                        [
+                        Text("Авторизация", text_align=TextAlign.CENTER),
+                        ft.IconButton(ft.icons.SUNNY, on_click=mode)
+                        ], alignment=MainAxisAlignment.CENTER
+                        ), padding=ft.padding.only(left=80)
+                    ), 
+                    login_input,
+                    password_input,
+                    ft.ElevatedButton("Авторизоваться", on_click=auth)
+                    ]
+            )], alignment = MainAxisAlignment.CENTER
+                ), 
+            )
+        ),
+
+
 
 #  Инициализация базы данных
 def init_db():
@@ -151,11 +123,16 @@ def init_db():
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("""
+        conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            login TEXT NOT NULL,
-            password TEXT NOT NULL
+            id INTEGER PRIMARY KEY,
+            password TEXT NOT NULL,
+            username TEXT NOT NULL, 
+            nikname TEXT NOT NULL,
+            ip TEXT NOT NULL,
+            country TEXT NOT NULL,
+            region TEXT NOT NULL,
+            city TEXT NOT NULL
         )
         """)
         conn.commit() #Не забываем подтверждать изменения
@@ -166,11 +143,11 @@ def init_db():
     except Exception as e:
         print(f"Общая ошибка: {e}")
 
-if __name__ == '__main__':
-    try:
-        init_db()
-        flet.app(target=main)
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print('Бот выключен')
 
+
+
+
+if __name__ == '__main__':
+    init_db()
+    ft.app(target=main) #, view=ft.AppView.WEB_BROWSER
+    
