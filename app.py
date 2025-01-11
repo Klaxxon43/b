@@ -1,175 +1,191 @@
-import flet as ft, random
-from flet import Page, MainAxisAlignment, TextField, TextAlign, Text
-import sqlite3
-import asyncio
-from aiogram import Bot
-import requests
-import os, sys
-import openai, httpx
-# Ваш токен бота
-BOT_TOKEN = '7665691978:AAE3M_XAYI4m6Qy7zorXrBCqrwg0MjsCelw'  # Замените на ваш токен бота
-OPENAI_API_KEY = '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'
-proxy= 'http://2NeYSVvR:dacqMbf7@172.120.50.179:63456'
+import pygame
+import pygame.locals
+import random
 
-client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY,
-                            http_client=httpx.AsyncClient(
-                                proxy=proxy,
-                                transport=httpx.HTTPTransport(local_address="0.0.0.0")
-                                ))
+image_path = '' #/data/data/org.test.klaxxongame/files/app/
 
-# Функция для проверки пользователя в базе данных
-def check_user(login, password):
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE id = ? AND password = ?", (login, password))
-    user = cursor.fetchone()
-    conn.close()
-    return user
-
-async def send_message(chat_id, text):
-    bot = Bot(token=BOT_TOKEN)
-    await bot.send_message(chat_id=chat_id, text=text)
-    await bot.session.close() 
-
-async def main(page: Page):
-    page.vertical_alignment = MainAxisAlignment.CENTER
-    page.window_width = 500
-    page.window_height = 700
-    page.theme_mode = 'dark'
-
-    login_input = TextField(text_align=TextAlign.CENTER, label="Login")
-    password_input = TextField(text_align=TextAlign.CENTER, label="Password", password=True)
-    user_memory = {}
+clock = pygame.time.Clock()
+pygame.init()
+screen = pygame.display.set_mode((1000, 800))
+pygame.display.set_caption("Klaxxon Game") #название игры 
+icon = pygame.image.load(image_path+'image/icon.png').convert_alpha()
+pygame.display.set_icon(icon) #иконка
 
 
+# square = pygame.Surface((50, 170))
+# square.fill('Blue')
+
+# myfont = pygame.font.Font('Righteous/Righteous-Regular.ttf', 40)
+# text_surface = myfont.render('Klaxxon', True, (252, 252, 252))
+
+bg = pygame.image.load(image_path+'image/background.jpg').convert_alpha()
+ghost = pygame.image.load(image_path+'image/ghost.png').convert_alpha()
+ghost = pygame.transform.smoothscale(ghost, (77, 77))
+
+ghost_list_in_game = []
+
+down1 = pygame.image.load(image_path+'Sprite\down\image_0-0.png').convert_alpha()
+down1 = pygame.transform.smoothscale(down1, (88, 88))
+down2 = pygame.image.load(image_path+'Sprite\down\image_0-1.png').convert_alpha()
+down2 = pygame.transform.smoothscale(down1, (88, 88))
+down3 = pygame.image.load(image_path+'Sprite\down\image_0-2.png').convert_alpha()
+down3 = pygame.transform.smoothscale(down1, (88, 88))
+down4 = pygame.image.load(image_path+'Sprite\down\image_0-3.png').convert_alpha()
+down4= pygame.transform.smoothscale(down1, (88, 88))
+
+walk_down = [
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\down\image_0-0.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\down\image_0-1.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\down\image_0-2.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\down\image_0-3.png').convert_alpha(), (88,88)),
+]
+
+walk_right = [
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\Right\image_2-0.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\Right\image_2-1.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\Right\image_2-2.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\Right\image_2-3.png').convert_alpha(), (88,88)),
+]
+
+walk_left = [
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\left\image_1-0.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\left\image_1-1.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\left\image_1-2.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite\left\image_1-3.png').convert_alpha(), (88,88)),
+   
+]
+
+walk_up = [
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite/up\image_3-0.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite/up\image_3-1.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite/up\image_3-2.png').convert_alpha(), (88,88)),
+    pygame.transform.smoothscale(pygame.image.load(image_path+'Sprite/up\image_3-3.png').convert_alpha(), (88,88)), 
+] 
+
+player_anim_count = 0
+bg_x = 0
+
+gameplay = True
+
+label = pygame.font.Font('Righteous\Righteous-Regular.ttf', 60)
+lose_label = label.render('You lose!', True, (193, 196, 199))
+restart_label = label.render('Play again', True, (115, 132, 148))
+
+restart_label_react = restart_label.get_rect(topleft=(360,300))
+
+bullet = pygame.transform.smoothscale(pygame.image.load(image_path+'image/bullet.png'), (88,88))
+bullets = []
+
+player_speed = 20
+player_jump = 8
+is_jump = False
+player_x = 150
+player_y = 530
+bg_sound = pygame.mixer.Sound(image_path+'music.mp3')
+bg_sound.set_volume(1)
+bg_sound.play(loops=-1)
 
 
-    gpt_text = ft.Text(value="", expand=True)
-    gpt_input = ft.TextField(expand=True)
+running = True
+while running:
+    if gameplay == True:
+        ghost_timer = pygame.USEREVENT +1 
+        pygame.time.set_timer(ghost_timer, random.randint(1500, 2500))
+        screen.blit(bg, (bg_x, 0))
+        screen.blit(bg, (bg_x + 700, 0))
 
-    async def auth(e):
-        _login = login_input.value
-        _pass = password_input.value
+        player_rect = walk_left[0].get_rect(topleft=(player_x, player_y))
+        
+        if ghost_list_in_game:
+            for (i, el) in enumerate(ghost_list_in_game):
+                screen.blit(ghost, el)
+                el.x -= 10
+                for ghost_rect in ghost_list_in_game: # Iterate through all ghost rectangles
+                    pygame.draw.rect(screen, (255, 0, 0), ghost_rect) # Red rectangle
 
-        user = check_user(_login, _pass)
-        if user:
-            page.clean()
-            next_content = ft.Container(              
-                ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Text("GPT Response:", weight=ft.FontWeight.BOLD),
-                                gpt_text,
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                        gpt_input,
-                        ft.ElevatedButton("Отправить", on_click=lambda e: send_msg(e)),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=10,
-                )
-            )
+                if el.x < -10:
+                    ghost_list_in_game.pop(i)
+                
+                if player_rect.colliderect(el):
+                    gameplay = False
 
-            page.add(next_content)
-            page.update()
+        keys = pygame.key.get_pressed()
+        
+        # Обработка движения и отображение анимации
+        if keys[pygame.K_d]:
+            screen.blit(walk_right[player_anim_count], (player_x, player_y))
+        elif keys[pygame.K_a]:
+            screen.blit(walk_left[player_anim_count], (player_x, player_y))
         else:
-            page.add(ft.Text("Неверный логин или пароль", text_align=ft.TextAlign.CENTER))
-            page.update()
+            screen.blit(walk_down[0], (player_x, player_y - 15))
+
+        if keys[pygame.K_LEFT] or (keys[pygame.K_a] and player_x > 50):
+            player_x -= player_speed
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            player_x += player_speed
 
 
-    async def gpt(text):
-        try:
-            if text:
-                response = await client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": str(text)}],
-                )
-                return response.choices[0].message.content
+        # Логика прыжка
+        if not is_jump:
+            if keys[pygame.K_SPACE] or keys[pygame.K_w]:
+                is_jump = True
+                player_jump = 8  # Сброс высоты прыжка при начале прыжка
+        else:
+            if player_jump >= -8:
+                if player_jump > 0:
+                    player_y -= (player_jump ** 2) / 2
+                else:
+                    player_y += (player_jump ** 2) / 2
+                player_jump -= 1
             else:
-                return "Введите текст"
-        except Exception as e:
-            return f"Ошибка: {e}"
+                is_jump = False
+                player_jump = 8  # Сброс высоты прыжка после завершения
 
+        # Обновление анимации
+        if player_anim_count == 3:
+            player_anim_count = 0
+        else:
+            player_anim_count += 1
 
-    async def send_msg(e):
-        input_text = gpt_input.value
-        gpt_input.value = ""
-        response = await gpt(input_text)
-        gpt_text.value = response
-        page.update()
+        bg_x -= 10
+        if bg_x <= -618:
+            bg_x = 0
 
+        if keys[pygame.K_k]:
+            bullets.append(bullet.get_rect(topleft = (player_x+30, player_y-5))) 
 
+        if bullets:
+            for el in bullets:
+                screen.blit(bullet, (el.x, el.y))
+                el.x+=25
 
-    def mode(e):
-        if page.theme_mode == 'dark':
-            page.theme_mode = 'light'
-        else: 
-            page.theme_mode = 'dark'
-        page.update()
-
-    page.add(
-        ft.Container(
-            ft.Row(
-                [
-                ft.Column(                    
-                    [ 
-                        ft.Container(ft.Row(
-                        [
-                        Text("Авторизация", text_align=TextAlign.CENTER),
-                        ft.IconButton(ft.icons.SUNNY, on_click=mode)
-                        ], alignment=MainAxisAlignment.CENTER
-                        ), padding=ft.padding.only(left=80)
-                    ), 
-                    login_input,
-                    password_input,
-                    ft.ElevatedButton("Авторизоваться", on_click=auth)
-                    ]
-            )], alignment = MainAxisAlignment.CENTER
-                ), 
-            )
-        ),
-
-
-
-#  Инициализация базы данных
-def init_db():
-    if getattr(sys, 'frozen', False):
-        # Если запущен из исполняемого файла
-        application_path = sys._MEIPASS
     else:
-        # Если запущен из исходного кода
-        application_path = os.path.dirname(os.path.abspath(__file__)) # Замена file на __file__
-    db_path = os.path.join(application_path, "database.db")
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY,
-            password TEXT NOT NULL,
-            username TEXT NOT NULL, 
-            nikname TEXT NOT NULL,
-            ip TEXT NOT NULL,
-            country TEXT NOT NULL,
-            region TEXT NOT NULL,
-            city TEXT NOT NULL
-        )
-        """)
-        conn.commit() #Не забываем подтверждать изменения
-        conn.close()
-        print("База данных инициализирована.")
-    except sqlite3.OperationalError as e:
-        print(f"Ошибка при создании базы данных: {e}")
-    except Exception as e:
-        print(f"Общая ошибка: {e}")
+        screen.fill((87,88,89))
+        screen.blit(lose_label, (400, 200))
+        screen.blit(restart_label, restart_label_react)
+        bg_sound.set_volume(0)
+
+        mouse = pygame.mouse.get_pos()
+        if restart_label_react.collidepoint(mouse) and pygame.mouse.get_pressed()[0]:
+            gameplay = True
+            player_x = 150
+ 
+            ghost_list_in_game.clear()
+
+    pygame.display.update()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == ghost_timer:
+            rect = ghost.get_rect(topleft=(1020, 530))
+            ghost_list_in_game.append(rect) 
 
 
+    # Установка частоты кадров
+    if is_jump:
+        clock.tick(20)  # Быстрая частота для прыжка
+    else:
+        clock.tick(7)  # Медленная частота для обычной анимации
 
-
-
-if __name__ == '__main__':
-    init_db()
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER) #, view=ft.AppView.WEB_BROWSER
-    
+pygame.quit()
